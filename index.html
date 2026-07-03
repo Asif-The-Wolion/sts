@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #141414;
+      --bg-elev: #1c1c1c;
+      --bg-card: #202020;
+      --border: #2e2e2e;
+      --gold: #C9A227;
+      --gold-dim: rgba(201,162,39,0.15);
+      --text: #EDEDED;
+      --text-dim: #9A9A9A;
+      --green: #5FAE72;
+      --red: #C05B4E;
+      --amber: #D9A441;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      overscroll-behavior-y: contain;
+    }
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+    #app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header.topbar {
+      padding: 18px 16px 10px; position: sticky; top: 0; background: var(--bg);
+      z-index: 10; border-bottom: 1px solid var(--border);
+    }
+    header.topbar .brand { font-size: 13px; letter-spacing: 1.5px; color: var(--gold); text-transform: uppercase; font-weight: 600; }
+    header.topbar .clock { font-family: 'IBM Plex Mono', monospace; font-size: 28px; font-weight: 500; margin-top: 4px; }
+    header.topbar .date { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+
+    main { flex: 1; padding: 14px 16px 90px; }
+
+    /* NOW/NEXT CARD */
+    .now-next { display: flex; gap: 10px; margin-bottom: 18px; }
+    .nn-card { flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+    .nn-card .nn-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+    .nn-card.current { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-dim); }
+    .nn-card .nn-title { font-size: 15px; font-weight: 600; }
+    .nn-card .nn-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+    .hours-strip { display:flex; justify-content: space-between; align-items:center; background: var(--bg-elev); border-radius: 10px; padding: 10px 14px; margin-bottom: 18px; }
+    .hours-strip .val { font-family: 'IBM Plex Mono', monospace; color: var(--gold); font-weight: 600; font-size: 16px; }
+    .hours-strip .lbl { font-size: 12px; color: var(--text-dim); }
+
+    /* DAY STRIP */
+    .section-title { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); margin: 18px 0 10px; }
+    .block {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+      transition: border-color .15s;
+    }
+    .block.current { border-color: var(--gold); background: linear-gradient(90deg, var(--gold-dim), var(--bg-card) 60%); }
+    .block.past.logged { opacity: 0.55; }
+    .block.past:not(.logged) { border-color: var(--red); }
+    .block .time-col { width: 58px; flex-shrink:0; }
+    .block .time-col .t { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; }
+    .block .time-col .dur { font-size: 10px; color: var(--text-dim); }
+    .block .mid { flex: 1; min-width: 0; }
+    .block .mid .title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .block .mid .sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+    .block .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.Pending { background: var(--text-dim); }
+    .status-dot.Happened { background: var(--green); }
+    .status-dot.Cancelled { background: var(--red); }
+    .status-dot.Off-day { background: var(--amber); }
+    .status-dot.Rescheduled { background: var(--amber); }
+    .empty-note { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
+
+    /* BOTTOM NAV */
+    nav.tabs {
+      position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-elev);
+      border-top: 1px solid var(--border); display: flex; max-width: 480px; margin: 0 auto;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    nav.tabs button {
+      flex: 1; background: none; border: none; color: var(--text-dim); padding: 12px 4px 10px;
+      font-family: 'Inter', sans-serif; font-size: 10.5px; letter-spacing: .3px; cursor: pointer;
+    }
+    nav.tabs button.active { color: var(--gold); font-weight: 600; }
+    nav.tabs button .icon { display:block; font-size: 18px; margin-bottom: 3px; }
+
+    /* MODAL / SHEET */
+    .sheet-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: none;
+      align-items: flex-end; justify-content: center;
+    }
+    .sheet-overlay.open { display: flex; }
+    .sheet {
+      background: var(--bg-elev); width: 100%; max-width: 480px; border-radius: 18px 18px 0 0;
+      padding: 20px 18px calc(24px + env(safe-area-inset-bottom)); max-height: 88vh; overflow-y: auto;
+    }
+    .sheet h3 { margin: 0 0 14px; font-size: 16px; }
+    .sheet .grabber { width: 36px; height: 4px; background: var(--border); border-radius: 4px; margin: 0 auto 16px; }
+    label { display: block; font-size: 12px; color: var(--text-dim); margin: 12px 0 5px; }
+    input, select, textarea {
+      width: 100%; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 12px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px;
+    }
+    textarea { min-height: 60px; resize: vertical; }
+    .status-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .status-picker button {
+      flex: 1; min-width: 70px; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text-dim); font-size: 12px; cursor: pointer;
+    }
+    .status-picker button.sel { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
+    .row2 { display: flex; gap: 10px; }
+    .row2 > div { flex: 1; }
+    .btn-primary {
+      width: 100%; margin-top: 18px; background: var(--gold); color: #1a1a1a; border: none;
+      padding: 13px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;
+    }
+    .btn-secondary {
+      width: 100%; margin-top: 8px; background: none; color: var(--text-dim); border: 1px solid var(--border);
+      padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;
+    }
+    .close-x { position: absolute; top: 18px; right: 18px; color: var(--text-dim); font-size: 20px; background:none; border:none; cursor:pointer; }
+
+    /* LISTS */
+    .list-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .list-card .lc-name { font-weight: 600; font-size: 14px; }
+    .list-card .lc-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+    .lc-badge { font-size: 10px; padding: 3px 8px; border-radius: 20px; background: var(--gold-dim); color: var(--gold); font-weight:600; }
+    .fab {
+      position: fixed; bottom: 78px; right: max(16px, calc((100vw - 480px)/2 + 16px)); width: 52px; height: 52px;
+      border-radius: 50%; background: var(--gold); color: #1a1a1a; border: none; font-size: 26px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4); cursor: pointer; z-index: 20;
+    }
+    .rating-row { display:flex; gap:6px; margin-top:4px; }
+    .rating-row button { flex:1; padding:8px 0; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-dim); cursor:pointer; }
+    .rating-row button.sel { background: var(--gold); color:#1a1a1a; border-color: var(--gold); }
+    .loading { text-align:center; color: var(--text-dim); padding: 30px 0; font-size: 13px; }
+    .flag-card { border-left: 3px solid var(--red); background: var(--bg-card); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">Tuition &amp; Madrasa</div>
+    <div class="clock mono" id="clock">--:--</div>
+    <div class="date" id="dateLine">Loading...</div>
+  </header>
+
+  <main id="main">
+    <div class="loading">Loading today's schedule...</div>
+  </main>
+
+  <button class="fab" id="fab" style="display:none">+</button>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="today"><span class="icon">◆</span>Today</button>
+    <button class="tab-btn" data-tab="students"><span class="icon">▤</span>Students</button>
+    <button class="tab-btn" data-tab="payments"><span class="icon">৳</span>Payments</button>
+    <button class="tab-btn" data-tab="freeslots"><span class="icon">◇</span>Free</button>
+    <button class="tab-btn" data-tab="notes"><span class="icon">✎</span>Notes</button>
+  </nav>
+</div>
+
+<!-- LOG SESSION SHEET -->
+<div class="sheet-overlay" id="logOverlay">
+  <div class="sheet">
+    <button class="close-x" onclick="closeSheet('logOverlay')">✕</button>
+    <div class="grabber"></div>
+    <h3 id="logTitle">Log Session</h3>
+    <label>Status</label>
+    <div class="status-picker" id="statusPicker">
+      <button data-v="Happened">Happened</button>
+      <button data-v="Off-day">Off-day</button>
+      <button data-v="Cancelled">Cancelled</button>
+      <button data-v="Rescheduled">Rescheduled</button>
+    </div>
+    <label>Homework given</label>
+    <textarea id="hwText" placeholder="e.g. Exercise 4, page 12"></textarea>
+    <div class="row2">
+      <div>
+        <label>Pages</label>
+        <input id="hwPages" type="number" placeholder="0">
+      </div>
+      <div>
+        <label>Punishment</label>
+        <select id="punishSel"><option value="N">No</option><option value="Y">Yes</option></select>
+      </div>
+    </div>
+    <label>Punishment note (optional)</label>
+    <input id="punishNote" type="text" placeholder="e.g. 10 lines for missed HW">
+    <button class="btn-primary" onclick="submitLog()">Save</button>
+  </div>
+</div>
+
+<!-- STUDENT ADD/EDIT SHEET -->
+<div class="sheet-overlay" id="studentOverlay">
+  <div class="sheet">
+    <button class="close-x" onclick="closeSheet('studentOverlay')">✕</button>
+    <div class="grabber"></div>
+    <h3>Add Student</h3>
+    <label>Name</label>
+    <input id="stName" type="text">
+    <label>Role</label>
+    <select id="stRole"><option value="private">Private</option><option value="madrasa">Madrasa</option></select>
+    <label>Class / Group</label>
+    <input id="stClass" type="text" placeholder="e.g. Class 5 or SSC Physics">
+    <label>Phone</label>
+    <input id="stPhone" type="text">
+    <div class="row2">
+      <div>
+        <label>Monthly fee</label>
+        <input id="stFee" type="number">
+      </div>
+      <div>
+        <label>Start date</label>
+        <input id="stStart" type="date">
+      </div>
+    </div>
+    <button class="btn-primary" onclick="submitStudent()">Save Student</button>
+  </div>
+</div>
+
+<!-- PAYMENT SHEET -->
+<div class="sheet-overlay" id="paymentOverlay">
+  <div class="sheet">
+    <button class="close-x" onclick="closeSheet('paymentOverlay')">✕</button>
+    <div class="grabber"></div>
+    <h3>Log Payment</h3>
+    <label>Student</label>
+    <select id="payStudent"></select>
+    <div class="row2">
+      <div>
+        <label>Month</label>
+        <input id="payMonth" type="month">
+      </div>
+      <div>
+        <label>Amount</label>
+        <input id="payAmount" type="number">
+      </div>
+    </div>
+    <label>Method</label>
+    <select id="payMethod"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option></select>
+    <label>Note</label>
+    <input id="payNote" type="text">
+    <button class="btn-primary" onclick="submitPayment()">Save Payment</button>
+  </div>
+</div>
+
+<!-- NOTE SHEET -->
+<div class="sheet-overlay" id="noteOverlay">
+  <div class="sheet">
+    <button class="close-x" onclick="closeSheet('noteOverlay')">✕</button>
+    <div class="grabber"></div>
+    <h3>Student Note</h3>
+    <label>Student</label>
+    <select id="noteStudent"></select>
+    <label>Attention (1-5)</label>
+    <div class="rating-row" id="attnRow"></div>
+    <label>Capability (1-5)</label>
+    <div class="rating-row" id="capRow"></div>
+    <label>Note</label>
+    <textarea id="noteText" placeholder="What stood out today?"></textarea>
+    <button class="btn-primary" onclick="submitNote()">Save Note</button>
+  </div>
+</div>
+
+<script>
+  // ====== CONFIG — fill these in before deploying to GitHub Pages ======
+  // Your Apps Script Web App URL, ends in /exec. Get it from Deploy > Manage deployments.
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRB6d338YQtX8AnA0FC3NmHGgyltr48_iZbVohXZtHHjwY67EYkV3H5mZoOc-3JwYqXg/exec';
+  // Must match the API_KEY constant in Code.gs exactly.
+  var API_KEY = '2743ak';
+  // =======================================================================
+
+  var api = {
+    get: function (action, params) {
+      params = params || {};
+      var qs = Object.keys(params).map(function (k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
+      var url = APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action) + '&key=' + encodeURIComponent(API_KEY) + (qs ? '&' + qs : '');
+      return fetch(url).then(function (r) { return r.json(); }).then(unwrap_);
+    },
+    post: function (action, data) {
+      // IMPORTANT: Content-Type must stay 'text/plain' — 'application/json' triggers
+      // a CORS preflight (OPTIONS request) that Apps Script cannot answer, and the
+      // call will fail silently in the browser console with no useful error.
+      return fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: action, key: API_KEY, data: data || {} })
+      }).then(function (r) { return r.json(); }).then(unwrap_);
+    }
+  };
+
+  function unwrap_(res) {
+    if (res.error) throw new Error(res.error);
+    if (res.ok === false) throw new Error(res.error || 'Unknown API error');
+    return res.data;
+  }
+</script>
+<script>
+  var state = { tab: 'today', activeSlotId: null, statusSel: 'Happened', attn: 0, cap: 0, students: [] };
+
+  function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
+  function openSheet(id) { document.getElementById(id).classList.add('open'); }
+
+  // ---- CLOCK ----
+  function tickClock() {
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    var ap = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    document.getElementById('clock').textContent = h12 + ':' + (m < 10 ? '0' + m : m) + ' ' + ap;
+  }
+  setInterval(tickClock, 1000 * 20);
+  tickClock();
+
+  // ---- TAB NAV ----
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      state.tab = btn.dataset.tab;
+      render();
+    });
+  });
+
+  function render() {
+    var fab = document.getElementById('fab');
+    fab.style.display = 'block';
+    if (state.tab === 'today') { fab.style.display = 'none'; renderToday(); }
+    else if (state.tab === 'students') { fab.onclick = function(){ openSheet('studentOverlay'); }; renderStudents(); }
+    else if (state.tab === 'payments') { fab.onclick = function(){ loadStudentDropdown('payStudent'); openSheet('paymentOverlay'); }; renderPayments(); }
+    else if (state.tab === 'freeslots') { fab.style.display = 'none'; renderFreeSlots(); }
+    else if (state.tab === 'notes') { fab.onclick = function(){ loadStudentDropdown('noteStudent'); resetRatings(); openSheet('noteOverlay'); }; renderNotes(); }
+  }
+
+  // ---- TODAY ----
+  function renderToday() {
+    var main = document.getElementById('main');
+    main.innerHTML = '<div class="loading">Loading today\'s schedule...</div>';
+    api.get('getTodaySchedule').then(function (data) {
+      document.getElementById('dateLine').textContent = data.day_name + ' · ' + data.date;
+      var html = '';
+      var current = data.blocks.filter(function (b) { return b.is_current; })[0];
+      var next = data.blocks.filter(function (b) { return b.is_next; })[0];
+      html += '<div class="now-next">';
+      html += '<div class="nn-card ' + (current ? 'current' : '') + '"><div class="nn-label">Now</div>';
+      html += current ? '<div class="nn-title">' + esc(current.label) + '</div><div class="nn-sub">' + current.start_time + ' – ' + current.end_time + '</div>' : '<div class="nn-title">Free</div>';
+      html += '</div>';
+      html += '<div class="nn-card"><div class="nn-label">Next</div>';
+      html += next ? '<div class="nn-title">' + esc(next.label) + '</div><div class="nn-sub">in ' + minsUntil(next.start_mins, data.now_mins) + '</div>' : '<div class="nn-title">Nothing else today</div>';
+      html += '</div></div>';
+
+      html += '<div class="hours-strip"><span class="lbl">Hours worked today</span><span class="val mono">' + data.hours_worked_today + ' h</span></div>';
+
+      html += '<div class="section-title">Today\'s sessions</div>';
+      if (data.blocks.length === 0) {
+        html += '<div class="empty-note">No slots scheduled for ' + data.day_name + '.</div>';
+      }
+      data.blocks.forEach(function (b) {
+        var cls = 'block' + (b.is_current ? ' current' : '') + (b.is_past ? ' past' : '') + (b.logged ? ' logged' : '');
+        html += '<div class="' + cls + ' block-item" data-slot-id="' + b.slot_id + '" data-label="' + esc(b.label) + '">';
+        html += '<div class="time-col"><div class="t mono">' + b.start_time + '</div><div class="dur">' + b.duration_mins + 'm</div></div>';
+        html += '<div class="mid"><div class="title">' + esc(b.label) + '</div><div class="sub">' + esc(b.subject || '') + (b.homework_given ? ' · HW: ' + esc(b.homework_given) : '') + '</div></div>';
+        html += '<div class="status-dot ' + b.status.replace(' ', '-') + '"></div>';
+        html += '</div>';
+      });
+      main.innerHTML = html;
+      main.querySelectorAll('.block-item').forEach(function (el) {
+        el.addEventListener('click', function () {
+          openLog(el.dataset.slotId, el.dataset.label);
+        });
+      });
+    }).catch(showError);
+  }
+
+  function minsUntil(target, now) {
+    var diff = target - now;
+    if (diff < 60) return diff + ' min';
+    return Math.round(diff / 60 * 10) / 10 + ' hr';
+  }
+
+  function openLog(slotId, label) {
+    state.activeSlotId = slotId;
+    state.statusSel = 'Happened';
+    document.getElementById('logTitle').textContent = label;
+    document.getElementById('hwText').value = '';
+    document.getElementById('hwPages').value = '';
+    document.getElementById('punishSel').value = 'N';
+    document.getElementById('punishNote').value = '';
+    document.querySelectorAll('#statusPicker button').forEach(function (b) {
+      b.classList.toggle('sel', b.dataset.v === 'Happened');
+    });
+    openSheet('logOverlay');
+  }
+
+  document.querySelectorAll('#statusPicker button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.statusSel = b.dataset.v;
+      document.querySelectorAll('#statusPicker button').forEach(function (x) { x.classList.remove('sel'); });
+      b.classList.add('sel');
+    });
+  });
+
+  function submitLog() {
+    var payload = {
+      slot_id: state.activeSlotId,
+      status: state.statusSel,
+      homework_given: document.getElementById('hwText').value,
+      homework_pages: document.getElementById('hwPages').value,
+      punishment: document.getElementById('punishSel').value === 'Y',
+      punishment_note: document.getElementById('punishNote').value
+    };
+    api.post('logSession', payload).then(function () {
+      closeSheet('logOverlay');
+      renderToday();
+    }).catch(showError);
+  }
+
+  // ---- STUDENTS ----
+  function renderStudents() {
+    var main = document.getElementById('main');
+    main.innerHTML = '<div class="loading">Loading students...</div>';
+    api.get('getStudents').then(function (students) {
+      state.students = students;
+      var html = '<div class="section-title">Students (' + students.length + ')</div>';
+      if (students.length === 0) html += '<div class="empty-note">No students yet. Tap + to add one.</div>';
+      students.forEach(function (s) {
+        html += '<div class="list-card">';
+        html += '<div><div class="lc-name">' + esc(s.name) + '</div><div class="lc-sub">' + esc(s.class_or_group || '') + '</div></div>';
+        html += '<span class="lc-badge">' + esc(s.role) + '</span>';
+        html += '</div>';
+      });
+      main.innerHTML = html;
+    }).catch(showError);
+  }
+
+  function submitStudent() {
+    var payload = {
+      name: document.getElementById('stName').value,
+      role: document.getElementById('stRole').value,
+      class_or_group: document.getElementById('stClass').value,
+      phone: document.getElementById('stPhone').value,
+      monthly_fee: document.getElementById('stFee').value,
+      tuition_start_date: document.getElementById('stStart').value
+    };
+    if (!payload.name) { alert('Name required'); return; }
+    api.post('addStudent', payload).then(function () {
+      closeSheet('studentOverlay');
+      renderStudents();
+    }).catch(showError);
+  }
+
+  function loadStudentDropdown(selectId) {
+    var sel = document.getElementById(selectId);
+    sel.innerHTML = '<option>Loading...</option>';
+    api.get('getStudents').then(function (students) {
+      state.students = students;
+      sel.innerHTML = students.map(function (s) { return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('');
+    }).catch(showError);
+  }
+
+
+  // ---- PAYMENTS ----
+  function renderPayments() {
+    var main = document.getElementById('main');
+    main.innerHTML = '<div class="loading">Loading payments...</div>';
+    Promise.all([api.get('getUnpaidFlags'), api.get('getPayments')]).then(function (results) {
+      var unpaid = results[0], payments = results[1];
+      var html = '';
+      if (unpaid.length) {
+        html += '<div class="section-title">Unpaid months</div>';
+        unpaid.forEach(function (f) {
+          html += '<div class="flag-card">' + esc(f.student_name) + ' — ' + f.month + '</div>';
+        });
+      }
+      html += '<div class="section-title">Recent payments</div>';
+      if (payments.length === 0) html += '<div class="empty-note">No payments logged yet.</div>';
+      payments.slice().reverse().slice(0, 30).forEach(function (p) {
+        html += '<div class="list-card"><div><div class="lc-name">' + fmtMoney(p.amount) + '</div><div class="lc-sub">' + esc(p.month) + ' · ' + esc(p.method) + '</div></div></div>';
+      });
+      main.innerHTML = html;
+    }).catch(showError);
+  }
+
+  function submitPayment() {
+    var payload = {
+      student_id: document.getElementById('payStudent').value,
+      month: document.getElementById('payMonth').value,
+      amount: document.getElementById('payAmount').value,
+      method: document.getElementById('payMethod').value,
+      note: document.getElementById('payNote').value
+    };
+    api.post('addPayment', payload).then(function () {
+      closeSheet('paymentOverlay');
+      renderPayments();
+    }).catch(showError);
+  }
+
+  // ---- FREE SLOTS ----
+  function renderFreeSlots() {
+    var main = document.getElementById('main');
+    main.innerHTML = '<div class="loading">Calculating free slots...</div>';
+    api.get('getFreeSlots').then(function (data) {
+      var html = '<div class="section-title">Open slots this week</div>';
+      Object.keys(data).forEach(function (day) {
+        var gaps = data[day];
+        if (!gaps.length) return;
+        html += '<div style="margin-top:12px;font-size:13px;font-weight:600;color:var(--gold)">' + day + '</div>';
+        gaps.forEach(function (g) {
+          html += '<div class="list-card"><div class="lc-name mono">' + g.start + ' – ' + g.end + '</div><div class="lc-sub">' + Math.round(g.duration_mins/60*10)/10 + ' hrs open</div></div>';
+        });
+      });
+      main.innerHTML = html;
+    }).catch(showError);
+  }
+
+  // ---- NOTES ----
+  function renderNotes() {
+    var main = document.getElementById('main');
+    main.innerHTML = '<div class="loading">Loading notes...</div>';
+    api.get('getNeglectedStudents', { days: 14 }).then(function (neglected) {
+      var html = '<div class="section-title">Needs attention (no note in 14+ days)</div>';
+      neglected.slice(0, 15).forEach(function (n) {
+        html += '<div class="flag-card">' + esc(n.name) + ' — ' + (n.days_since_note === null ? 'never noted' : n.days_since_note + ' days') + '</div>';
+      });
+      if (neglected.length === 0) html += '<div class="empty-note">Everyone has recent notes. Nice.</div>';
+      main.innerHTML = html;
+    }).catch(showError);
+  }
+
+  function resetRatings() {
+    state.attn = 0; state.cap = 0;
+    buildRatingRow('attnRow', 'attn');
+    buildRatingRow('capRow', 'cap');
+    document.getElementById('noteText').value = '';
+  }
+  function buildRatingRow(elId, key) {
+    var el = document.getElementById(elId);
+    el.innerHTML = '';
+    for (var i = 1; i <= 5; i++) {
+      var b = document.createElement('button');
+      b.textContent = i;
+      b.onclick = (function (v) { return function () { state[key] = v; buildRatingRow(elId, key); }; })(i);
+      if (state[key] === i) b.classList.add('sel');
+      el.appendChild(b);
+    }
+  }
+  function submitNote() {
+    var payload = {
+      student_id: document.getElementById('noteStudent').value,
+      attention_rating: state.attn,
+      capability_rating: state.cap,
+      behaviour_note: document.getElementById('noteText').value
+    };
+    api.post('addStudentNote', payload).then(function () {
+      closeSheet('noteOverlay');
+      renderNotes();
+    }).catch(showError);
+  }
+
+  // ---- UTIL ----
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function fmtMoney(n) { return '৳' + Number(n || 0).toLocaleString(); }
+  function showError(err) { alert('Error: ' + (err.message || err)); console.error(err); }
+
+  render();
+</script>
+</body>
+</html>
